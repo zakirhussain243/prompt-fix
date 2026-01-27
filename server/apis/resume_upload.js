@@ -1,26 +1,77 @@
-const exp = require('express')
+const exp = require('express');
 const pdfParse = require("pdf-parse");
+const multer = require("multer");
+const express_async_handler = require('express-async-handler');
+const Groq = require("groq-sdk");
 
-
-
-
-const multer = require("multer")//multer is used for file extracting from the frontend 
 const resume_app = exp.Router();
+const upload = multer({ storage: multer.memoryStorage() });
 
-const express_async_hanlder = require('express-async-handler')
-const upload = multer({storage:multer.memoryStorage()})//it stores the file in ram not in memory
-resume_app.post("/extract",upload.single("resume"),express_async_hanlder(async(req,res)=>{
-    console.log(typeof pdfParse);
-    console.log("🔥 request reached backend");
-    try{
-    const fileBuffer = req.file.buffer;//to get the binary data of the file.
-    const data = await pdfParse(fileBuffer);//to convert the binary data into text
-    console.log("extracted length:", data.text.length);
-    const extracted_text = data.text;//extracing the text from the data.
-    console.log("file:", req.file);
-    res.status(201).send({message:"successful, data is extracted",payload:extracted_text})
-    }catch(err){
-        console.log(err);
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY
+});
+
+resume_app.post(
+  "/extract",
+  upload.single("resume"),
+  express_async_handler(async (req, res) => {
+
+    console.log("request reached backend");
+
+    try {
+      // 1️⃣ PDF buffer
+      const fileBuffer = req.file.buffer;
+
+      // 2️⃣ Extract text from PDF
+      const data = await pdfParse(fileBuffer);
+      const extracted_text = data.text;
+
+      console.log("extracted length:", extracted_text.length);
+
+      // 3️⃣ Job description (TEXT INPUT)
+      const text = req.body.prompt;
+
+      // 4️⃣ Combine EXACT variables
+      const combinedPrompt = `
+SYSTEM:
+You are a resume editor AI assistant.
+
+TASK:
+Analyze the resume with respect to the given job description.
+
+JOB DESCRIPTION:
+${text}
+
+CANDIDATE RESUME:
+${extracted_text}
+
+RULES:
+- Match skills and experience to job requirements
+- Identify gaps
+- Suggest improvements
+- Do not invent information
+`;
+
+      // 5️⃣ Send to Groq
+      const response = await groq.chat.completions.create({
+        model: "llama-3.1-8b-instant",
+        messages: [
+          { role: "user", content: combinedPrompt }
+        ],
+        temperature: 0.2
+      });
+
+      // 6️⃣ Response
+      res.status(201).send({
+        message: "successful, resume analyzed",
+        payload: response.choices[0].message.content
+      });
+
+    } catch (err) {
+      console.log(err);
+      res.status(500).send({ error: "failed to process resume" });
     }
-}))
+  })
+);
+
 module.exports = resume_app;

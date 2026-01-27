@@ -1,3 +1,4 @@
+require('dotenv').config();
 const exp = require('express');
 const cors = require('cors')
 const { mongoose } = require('mongoose');
@@ -6,7 +7,7 @@ const user_app = require('../server/apis/user_api.js')
 const resume_app = require('../server/apis/resume_upload.js')
 app.use(cors())
 app.use(exp.json())//middle ware.
-require('dotenv').config();
+
 const port = process.env.PORT || 3000
 mongoose.connect(process.env.DBURL)
 .then(()=>{
